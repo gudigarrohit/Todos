@@ -8,7 +8,7 @@ const Navbar = () => {
 
       {/* Logo */}
       <div className="logo font-extrabold text-2xl tracking-wide">
-        <span className="cursor-pointer transition-colors hover:text-violet-300">
+        <span className="cursor-pointer transition-colors hover:text-violet-200">
           iTask Manager
         </span>
       </div>
@@ -30,7 +30,7 @@ const Navbar = () => {
         </li>
 
         {/* My Task */}
-        <li className="cursor-pointer relative group font-bold">
+        <li className="cursor-pointer relative group font-bold hover:text-violet-200">
           My Task
         </li>
 
