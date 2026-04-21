@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
-import { v4 as uuidv4 } from "uuid";
 import { CiEdit } from "react-icons/ci";
 import { MdDelete } from "react-icons/md";
 
@@ -15,7 +14,7 @@ export default function Home() {
   // ✅ LOAD FROM DATABASE
   useEffect(() => {
     fetch("/api/todos")
-      .then(res => res.json())
+      .then((res) => res.json())
       .then(setTodos);
   }, []);
 
@@ -23,88 +22,102 @@ export default function Home() {
     setshowFinished(!showFinished);
   };
 
-  // ✅ EDIT (same behavior as before)
-const handleEdit = (item) => {
-  setTodo(item.todo);
-  setEditId(item.id);
-};
+  // ✅ EDIT
+  const handleEdit = (item) => {
+    setTodo(item.todo);
+    setEditId(item._id);
+  };
 
-  // ✅ DELETE FROM DB
+  // ✅ DELETE
   const handleDelete = async (id) => {
     await fetch("/api/todos", {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
 
-    setTodos(todos.filter((item) => item.id !== id));
+    setTodos(todos.filter((item) => item._id !== id));
   };
 
-  // ✅ ADD TO DB
-const handleAdd = async () => {
-  if (todo.trim() === "") return;
+  // ✅ ADD + UPDATE
+  const handleAdd = async () => {
+    if (todo.trim() === "") return;
 
-  // 🔴 UPDATE MODE
-  if (editId) {
-    const updated = {
-      id: editId,
-      todo,
-      isCompleted: todos.find(t => t.id === editId)?.isCompleted || false,
-    };
+    // 🔴 UPDATE
+    if (editId) {
+      await fetch("/api/todos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editId,
+          todo,
+          isCompleted:
+            todos.find((t) => t._id === editId)?.isCompleted || false,
+        }),
+      });
 
-    await fetch("/api/todos", {
-      method: "PATCH",
-      body: JSON.stringify(updated),
-    });
+      setTodos(
+        todos.map((t) =>
+          t._id === editId ? { ...t, todo } : t
+        )
+      );
 
-    setTodos(todos.map(t => t.id === editId ? updated : t));
-    setEditId(null);
-  } 
-  // 🟢 CREATE MODE
-  else {
-    const newTodo = {
-      id: uuidv4(),
-      todo,
-      isCompleted: false,
-    };
+      setEditId(null);
+    }
 
-    await fetch("/api/todos", {
-      method: "POST",
-      body: JSON.stringify(newTodo),
-    });
+    // 🟢 CREATE
+    else {
+      const res = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ todo }),
+      });
 
-    setTodos([...todos, newTodo]);
-  }
+      const data = await res.json();
 
-  setTodo("");
-};
+      const newTodo = {
+        _id: data.insertedId,
+        todo,
+        isCompleted: false,
+        createdAt: new Date(),
+      };
+
+      setTodos([...todos, newTodo]);
+    }
+
+    setTodo("");
+  };
+
   const handleChange = (e) => {
     setTodo(e.target.value);
   };
 
-  // ✅ UPDATE CHECKBOX IN DB
-  const handleCheckbox = async (e) => {
-    let id = e.target.name;
-
-    let newTodos = [...todos];
-    let index = newTodos.findIndex((item) => item.id === id);
-
-    newTodos[index].isCompleted = !newTodos[index].isCompleted;
-
-    const updated = newTodos[index];
-
+  // ✅ CHECKBOX UPDATE
+  const handleCheckbox = async (item) => {
     await fetch("/api/todos", {
-      method: "PATCH",
-      body: JSON.stringify(updated),
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: item._id,
+        todo: item.todo,
+        isCompleted: !item.isCompleted,
+      }),
     });
 
-    setTodos(newTodos);
+    setTodos(
+      todos.map((t) =>
+        t._id === item._id
+          ? { ...t, isCompleted: !t.isCompleted }
+          : t
+      )
+    );
   };
 
   return (
     <>
       <Navbar />
 
-      {/* SAME UI (unchanged) */}
+      {/* SAME UI */}
       <div className="container bg-gradient-to-r from-violet-500 via-purple-900 shadow-2xl m-auto mt-7 rounded-2xl p-8 min-h-[82vh] w-11/12 md:w-2/3 lg:w-1/2">
 
         {/* Add Todo */}
@@ -127,7 +140,7 @@ const handleAdd = async () => {
               disabled={todo.length <= 1}
               className="bg-violet-700 hover:bg-violet-900 disabled:bg-violet-400 px-5 py-2 rounded-lg text-white"
             >
-              Save
+              {editId ? "Update" : "Save"}
             </button>
           </div>
         </div>
@@ -153,49 +166,70 @@ const handleAdd = async () => {
             <div className="text-center">No todos to display</div>
           )}
 
-          {todos.map((item) => (
-            (showFinished || !item.isCompleted) && (
-              <div
-                key={item.id}
-                className="flex items-center justify-between bg-white rounded-xl px-5 py-2"
-              >
-                <div className="flex gap-3 items-center w-[60%]">
-                  <input
-                    name={item.id}
-                    onChange={handleCheckbox}
-                    type="checkbox"
-                    checked={item.isCompleted}
-                  />
+          {todos.map(
+            (item) =>
+              (showFinished || !item.isCompleted) && (
+                <div
+                  key={item._id}
+                  className="flex items-center justify-between bg-white rounded-xl px-5 py-3"
+                >
+                  <div className="flex gap-3 items-center w-[65%]">
+                    <input
+                      onChange={() => handleCheckbox(item)}
+                      type="checkbox"
+                      checked={item.isCompleted}
+                    />
 
-                  <div
-                    className={`font-semibold ${
-                      item.isCompleted
-                        ? "line-through text-gray-400"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    {item.todo}
+                    {/* TEXT + TIME */}
+                    <div className="flex flex-col">
+                      <div
+                        className={`font-semibold ${item.isCompleted
+                            ? "line-through text-gray-400"
+                            : "text-gray-700"
+                          }`}
+                      >
+                        {item.todo}
+                      </div>
+
+                      <div className="text-xs text-gray-500">
+                        {item.createdAt && (() => {
+                          const date = new Date(item.createdAt);
+
+                          const day = String(date.getDate()).padStart(2, "0");
+                          const month = String(date.getMonth() + 1).padStart(2, "0");
+                          const year = date.getFullYear();
+
+                          let hours = date.getHours();
+                          const minutes = String(date.getMinutes()).padStart(2, "0");
+
+                          const ampm = hours >= 12 ? "PM" : "AM";
+                          hours = hours % 12 || 12;
+
+                          return `${day}-${month}-${year} & ${hours}:${minutes} ${ampm}`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ACTIONS */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="bg-blue-500 px-2 py-1 rounded text-white"
+                    >
+                      <CiEdit />
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(item._id)}
+                      className="bg-red-500 px-2 py-1 rounded text-white"
+                    >
+                      <MdDelete />
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="bg-blue-500 px-2 py-1 rounded text-white"
-                  >
-                    <CiEdit />
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="bg-red-500 px-2 py-1 rounded text-white"
-                  >
-                    <MdDelete />
-                  </button>
-                </div>
-              </div>
-            )
-          ))}
+              )
+          )}
         </div>
       </div>
     </>

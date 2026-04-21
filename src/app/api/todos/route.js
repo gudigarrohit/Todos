@@ -1,28 +1,46 @@
-import { db } from "@/lib/dynamodb";
-import {
-  PutCommand,
-  ScanCommand,
-  DeleteCommand,
-  UpdateCommand,
-} from "@aws-sdk/lib-dynamodb";
-
-// GET
-export async function GET() {
-  const data = await db.send(
-    new ScanCommand({ TableName: "todos" })
-  );
-  return Response.json(data.Items || []);
-}
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 // CREATE
 export async function POST(req) {
-  const body = await req.json();
+  const { todo } = await req.json();
 
-  await db.send(
-    new PutCommand({
-      TableName: "todos",
-      Item: body,
-    })
+  const client = await clientPromise;
+  const db = client.db();
+
+  const result = await db.collection("todos").insertOne({
+    todo,
+    isCompleted: false,
+    createdAt: new Date(),
+  });
+
+  return Response.json(result);
+}
+
+// GET
+export async function GET() {
+  const client = await clientPromise;
+  const db = client.db();
+
+  const todos = await db.collection("todos").find({}).toArray();
+  return Response.json(todos);
+}
+
+// UPDATE
+export async function PUT(req) {
+  const { id, todo, isCompleted } = await req.json();
+
+  const client = await clientPromise;
+  const db = client.db();
+
+  await db.collection("todos").updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        todo,
+        isCompleted,
+      },
+    }
   );
 
   return Response.json({ success: true });
@@ -32,32 +50,12 @@ export async function POST(req) {
 export async function DELETE(req) {
   const { id } = await req.json();
 
-  await db.send(
-    new DeleteCommand({
-      TableName: "todos",
-      Key: { id },
-    })
-  );
+  const client = await clientPromise;
+  const db = client.db();
 
-  return Response.json({ success: true });
-}
-
-// UPDATE
-export async function PATCH(req) {
-  const { id, todo, isCompleted } = await req.json();
-
-  await db.send(
-    new UpdateCommand({
-      TableName: "todos",
-      Key: { id },
-      UpdateExpression: "SET #t = :t, isCompleted = :c",
-      ExpressionAttributeNames: { "#t": "todo" },
-      ExpressionAttributeValues: {
-        ":t": todo,
-        ":c": isCompleted,
-      },
-    })
-  );
+  await db.collection("todos").deleteOne({
+    _id: new ObjectId(id),
+  });
 
   return Response.json({ success: true });
 }
