@@ -1,8 +1,5 @@
-import { db } from "@/lib/dynamodb";
-import {
-  ScanCommand,
-  UpdateCommand
-} from "@aws-sdk/lib-dynamodb";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 export async function POST(req) {
   try {
@@ -47,14 +44,16 @@ export async function POST(req) {
       });
     }
 
-    // Fetch all todos
-    const data = await db.send(
-      new ScanCommand({
-        TableName: "todos"
-      })
-    );
+    const client = await clientPromise;
+    const db = client.db("todoapp");
 
-    const task = data.Items.find(
+    // Fetch all todos
+    const todos = await db
+      .collection("todos")
+      .find({})
+      .toArray();
+
+    const task = todos.find(
       (item) =>
         item.todo.toLowerCase() ===
         oldTodo.toLowerCase()
@@ -72,21 +71,15 @@ export async function POST(req) {
     }
 
     // Update todo
-    await db.send(
-      new UpdateCommand({
-        TableName: "todos",
-        Key: {
-          id: task.id
-        },
-        UpdateExpression:
-          "SET #todo = :newTodo",
-        ExpressionAttributeNames: {
-          "#todo": "todo"
-        },
-        ExpressionAttributeValues: {
-          ":newTodo": newTodo
+    await db.collection("todos").updateOne(
+      {
+        _id: new ObjectId(task._id)
+      },
+      {
+        $set: {
+          todo: newTodo
         }
-      })
+      }
     );
 
     return Response.json({

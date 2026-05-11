@@ -1,8 +1,5 @@
-import { db } from "@/lib/dynamodb";
-import {
-  ScanCommand,
-  DeleteCommand
-} from "@aws-sdk/lib-dynamodb";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 export async function POST(req) {
   try {
@@ -10,8 +7,7 @@ export async function POST(req) {
 
     console.log("Incoming Delete Body:", body);
 
-    const toolCall =
-      body.message?.toolCalls?.[0];
+    const toolCall = body.message?.toolCalls?.[0];
 
     const toolCallId =
       toolCall?.id ||
@@ -21,136 +17,105 @@ export async function POST(req) {
     let parsedArgs = {};
 
     try {
-      // Vapi sometimes sends arguments as string
-      if (
-        typeof toolCall?.arguments === "string"
-      ) {
-        parsedArgs = JSON.parse(
-          toolCall.arguments
-        );
-      }
-
-      // Vapi sometimes sends function arguments as string
+      if (typeof toolCall?.arguments === "string") {
+        parsedArgs = JSON.parse(toolCall.arguments);
+      } 
       else if (
-        typeof toolCall?.function?.arguments ===
-        "string"
+        typeof toolCall?.function?.arguments === "string"
       ) {
         parsedArgs = JSON.parse(
           toolCall.function.arguments
         );
       }
     } catch (err) {
-      console.log(
-        "Argument Parse Error:",
-        err
-      );
+      console.log("Argument Parse Error:", err);
     }
 
-    // Extract todo from all possible locations
+    // Extract todo text
     const todo =
       body.todo ||
       body.parameters?.todo ||
       parsedArgs?.todo ||
       toolCall?.arguments?.todo ||
       toolCall?.function?.arguments?.todo ||
-      body.message?.toolCallList?.[0]
-        ?.arguments?.todo ||
-      body.message?.toolWithToolCallList?.[0]
-        ?.toolCall?.arguments?.todo ||
-      body.message?.artifact?.variableValues
-        ?.todo ||
-      body.message?.artifact?.variables
-        ?.todo;
+      body.message?.toolCallList?.[0]?.arguments?.todo ||
+      body.message?.toolWithToolCallList?.[0]?.toolCall?.arguments?.todo ||
+      body.message?.artifact?.variableValues?.todo ||
+      body.message?.artifact?.variables?.todo;
 
-    console.log(
-      "Parsed Args:",
-      parsedArgs
-    );
-
-    console.log(
-      "Final Extracted Todo:",
-      todo
-    );
+    console.log("Parsed Args:", parsedArgs);
+    console.log("Final Extracted Todo:", todo);
 
     if (!todo) {
       return Response.json({
         results: [
           {
             toolCallId,
-            result:
-              "Todo name is required"
+            result: "Todo name is required"
           }
         ]
       });
     }
 
+    const client = await clientPromise;
+    const db = client.db("todoapp");
+
     // Fetch all todos
-    const data = await db.send(
-      new ScanCommand({
-        TableName: "todos"
-      })
-    );
-const normalizedTodo = todo
-  .toLowerCase()
-  .trim()
-  .replace(/[^\w\s]/g, "");
+    const todos = await db
+      .collection("todos")
+      .find({})
+      .toArray();
 
-const task = data.Items.find((item) => {
-  const dbTodo = item.todo
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s]/g, "");
+    const normalizedTodo = todo
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s]/g, "");
 
-  return (
-    dbTodo.includes(normalizedTodo) ||
-    normalizedTodo.includes(dbTodo)
-  );
-});
+    const task = todos.find((item) => {
+      const dbTodo = item.todo
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s]/g, "");
+
+      return (
+        dbTodo.includes(normalizedTodo) ||
+        normalizedTodo.includes(dbTodo)
+      );
+    });
 
     if (!task) {
       return Response.json({
         results: [
           {
             toolCallId,
-            result:
-              "Todo not found"
+            result: "Todo not found"
           }
         ]
       });
     }
 
     // Delete task
-    await db.send(
-      new DeleteCommand({
-        TableName: "todos",
-        Key: {
-          id: task.id
-        }
-      })
-    );
+    await db.collection("todos").deleteOne({
+      _id: new ObjectId(task._id)
+    });
 
     return Response.json({
       results: [
         {
           toolCallId,
-          result:
-            "Task deleted successfully"
+          result: "Task deleted successfully"
         }
       ]
     });
 
   } catch (error) {
-    console.error(
-      "Delete Error:",
-      error
-    );
+    console.error("Delete Error:", error);
 
     return Response.json({
       results: [
         {
           toolCallId: "error",
-          result:
-            "Failed to delete task"
+          result: "Failed to delete task"
         }
       ]
     });

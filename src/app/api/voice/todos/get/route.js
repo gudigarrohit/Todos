@@ -1,5 +1,4 @@
-import { db } from "@/lib/dynamodb";
-import { ScanCommand } from "@aws-sdk/lib-dynamodb";
+import clientPromise from "@/lib/mongodb";
 
 export async function POST(req) {
   try {
@@ -15,14 +14,14 @@ export async function POST(req) {
       body.toolCallId ||
       "default-call-id";
 
-    // Fetch all todos
-    const data = await db.send(
-      new ScanCommand({
-        TableName: "todos"
-      })
-    );
+    const client = await clientPromise;
+    const db = client.db("todoapp");
 
-    const todos = data.Items || [];
+    // Fetch all todos
+    const todos = await db
+      .collection("todos")
+      .find({})
+      .toArray();
 
     const pendingTodos = todos.filter(
       (item) => !item.isCompleted

@@ -1,8 +1,5 @@
-import { db } from "@/lib/dynamodb";
-import {
-  ScanCommand,
-  UpdateCommand
-} from "@aws-sdk/lib-dynamodb";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 export async function POST(req) {
   try {
@@ -18,7 +15,7 @@ export async function POST(req) {
       body.toolCallId ||
       "default-call-id";
 
-    // Extract todo from both Postman + Vapi payloads
+    // Extract todo from Postman + Vapi payloads
     const todo =
       body.todo ||
       body.parameters?.todo ||
@@ -38,14 +35,16 @@ export async function POST(req) {
       });
     }
 
-    // Fetch all todos
-    const data = await db.send(
-      new ScanCommand({
-        TableName: "todos"
-      })
-    );
+    const client = await clientPromise;
+    const db = client.db("todoapp");
 
-    const task = data.Items.find(
+    // Fetch all todos
+    const todos = await db
+      .collection("todos")
+      .find({})
+      .toArray();
+
+    const task = todos.find(
       (item) =>
         item.todo.toLowerCase() ===
         todo.toLowerCase()
@@ -65,18 +64,15 @@ export async function POST(req) {
     // Toggle status
     const newStatus = !task.isCompleted;
 
-    await db.send(
-      new UpdateCommand({
-        TableName: "todos",
-        Key: {
-          id: task.id
-        },
-        UpdateExpression:
-          "SET isCompleted = :status",
-        ExpressionAttributeValues: {
-          ":status": newStatus
+    await db.collection("todos").updateOne(
+      {
+        _id: new ObjectId(task._id)
+      },
+      {
+        $set: {
+          isCompleted: newStatus
         }
-      })
+      }
     );
 
     return Response.json({
@@ -97,7 +93,8 @@ export async function POST(req) {
       results: [
         {
           toolCallId: "error",
-          result: "Failed to update task status"
+          result:
+            "Failed to update task status"
         }
       ]
     });
