@@ -4,85 +4,137 @@ import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { CiEdit } from "react-icons/ci";
 import { MdDelete } from "react-icons/md";
+import { ToastContainer, toast } from "react-toastify";
+import VoiceAgent from "@/components/VoiceAgent";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function Home() {
   const [todo, setTodo] = useState("");
   const [todos, setTodos] = useState([]);
   const [editId, setEditId] = useState(null);
-  const [showFinished, setshowFinished] = useState(true);
+  const [showFinished, setShowFinished] = useState(false);
 
-  // ✅ LOAD FROM DATABASE
-  useEffect(() => {
-    fetch("/api/todos")
-      .then((res) => res.json())
-      .then(setTodos);
-  }, []);
-
-  const toggleFinished = () => {
-    setshowFinished(!showFinished);
+  // FETCH TODOS
+  const fetchTodos = async () => {
+    try {
+      const res = await fetch("/api/todos");
+      const data = await res.json();
+      setTodos(data);
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to fetch todos");
+    }
   };
 
-  // ✅ EDIT
+  useEffect(() => {
+    fetchTodos();
+  }, []);
+
+  // DATE FORMAT
+  const formatDate = (createdAt) => {
+    const date = new Date(createdAt);
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+
+    return `${day}-${month}-${year} | ${hours}:${minutes}:${seconds} ${ampm}`;
+  };
+
+  const toggleFinished = () => {
+    setShowFinished(!showFinished);
+  };
+
+  // EDIT
   const handleEdit = (item) => {
     setTodo(item.todo);
     setEditId(item._id);
   };
 
-  // ✅ DELETE
+  // DELETE
   const handleDelete = async (id) => {
-    await fetch("/api/todos", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    try {
+      await fetch("/api/todos", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
 
-    setTodos(todos.filter((item) => item._id !== id));
+      setTodos(todos.filter((item) => item._id !== id));
+      toast.success("Todo deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete todo");
+    }
   };
 
-  // ✅ ADD + UPDATE
+  // ADD / UPDATE
   const handleAdd = async () => {
     if (todo.trim() === "") return;
 
-    // 🔴 UPDATE
+    // UPDATE
     if (editId) {
-      await fetch("/api/todos", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editId,
-          todo,
-          isCompleted:
-            todos.find((t) => t._id === editId)?.isCompleted || false,
-        }),
-      });
+      try {
+        const existingTodo = todos.find(
+          (t) => t._id === editId
+        );
 
-      setTodos(
-        todos.map((t) =>
-          t._id === editId ? { ...t, todo } : t
-        )
-      );
+        await fetch("/api/todos", {
+          method: "PUT", // keep PUT for MongoDB backend
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: editId,
+            todo,
+            isCompleted: existingTodo.isCompleted,
+          }),
+        });
 
-      setEditId(null);
+        setTodos(
+          todos.map((t) =>
+            t._id === editId
+              ? { ...t, todo }
+              : t
+          )
+        );
+
+        toast.success("Todo updated successfully");
+        setEditId(null);
+      } catch (error) {
+        toast.error("Failed to update todo");
+      }
     }
 
-    // 🟢 CREATE
+    // CREATE
     else {
-      const res = await fetch("/api/todos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ todo }),
-      });
+      try {
+        const res = await fetch("/api/todos", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            todo,
+            isCompleted: false,
+          }),
+        });
 
-      const data = await res.json();
+        const savedTodo = await res.json();
 
-      const newTodo = {
-        _id: data.insertedId,
-        todo,
-        isCompleted: false,
-        createdAt: new Date(),
-      };
-
-      setTodos([...todos, newTodo]);
+        setTodos([...todos, savedTodo]);
+        toast.success("Todo created successfully");
+      } catch (error) {
+        toast.error("Failed to create todo");
+      }
     }
 
     setTodo("");
@@ -92,78 +144,90 @@ export default function Home() {
     setTodo(e.target.value);
   };
 
-  // ✅ CHECKBOX UPDATE
+  // CHECKBOX TOGGLE
   const handleCheckbox = async (item) => {
-    await fetch("/api/todos", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: item._id,
-        todo: item.todo,
-        isCompleted: !item.isCompleted,
-      }),
-    });
+    try {
+      await fetch("/api/todos", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: item._id,
+          todo: item.todo,
+          isCompleted: !item.isCompleted,
+        }),
+      });
 
-    setTodos(
-      todos.map((t) =>
-        t._id === item._id
-          ? { ...t, isCompleted: !t.isCompleted }
-          : t
-      )
-    );
+      setTodos(
+        todos.map((t) =>
+          t._id === item._id
+            ? {
+                ...t,
+                isCompleted: !t.isCompleted,
+              }
+            : t
+        )
+      );
+
+      toast.success("Todo status updated");
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
   };
 
   return (
     <>
+      <ToastContainer position="top-right" autoClose={2000} />
       <Navbar />
 
-      {/* SAME UI */}
-      <div className="container bg-gradient-to-r from-violet-500 via-purple-900 shadow-2xl m-auto mt-7 rounded-2xl p-8 min-h-[82vh] w-11/12 md:w-2/3 lg:w-1/2">
+      <div className="container mb-6 bg-gradient-to-r from-violet-500 via-purple-900 shadow-2xl m-auto mt-7 rounded-2xl p-8 min-h-[82vh] w-11/12 md:w-2/3 lg:w-1/2">
 
         {/* Add Todo */}
-        <div className="addtodo mb-8">
-          <h2 className="text-2xl font-extrabold mb-4 text-purple-200">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold mb-4 text-purple-200">
             Add a Todo
           </h2>
 
           <div className="flex">
             <input
-              onChange={handleChange}
-              value={todo}
               type="text"
-              placeholder="Enter your todos"
-              className="bg-white text-black w-full rounded-lg px-4 py-2 mr-3 outline-none"
+              value={todo}
+              onChange={handleChange}
+              placeholder="Enter your todo"
+              className="bg-white text-black w-full rounded-lg px-4 py-2 mr-3"
             />
 
             <button
               onClick={handleAdd}
               disabled={todo.length <= 1}
-              className="bg-violet-700 hover:bg-violet-900 disabled:bg-violet-400 px-5 py-2 rounded-lg text-white"
+              className="bg-violet-700 hover:bg-violet-900 px-5 py-2 rounded-lg text-white"
             >
               {editId ? "Update" : "Save"}
             </button>
           </div>
         </div>
 
-        {/* Toggle */}
+        {/* Show Finished */}
         <div className="flex items-center gap-2 mb-6">
           <input
-            onChange={toggleFinished}
             type="checkbox"
             checked={showFinished}
-            className="cursor-pointer"
+            onChange={toggleFinished}
           />
           <label>Show Finished</label>
         </div>
 
-        {/* Todos */}
-        <h2 className="text-3xl font-extrabold mb-6 text-purple-200">
+        {/* Todo List */}
+        <h2 className="text-3xl font-bold mb-6 text-purple-200">
           Your Todos
         </h2>
 
         <div className="space-y-4">
           {todos.length === 0 && (
-            <div className="text-center">No todos to display</div>
+            <div className="text-center text-white">
+              No todos available
+            </div>
           )}
 
           {todos.map(
@@ -171,47 +235,35 @@ export default function Home() {
               (showFinished || !item.isCompleted) && (
                 <div
                   key={item._id}
-                  className="flex items-center justify-between bg-white rounded-xl px-5 py-3"
+                  className="flex justify-between items-center bg-white rounded-xl px-5 py-3"
                 >
                   <div className="flex gap-3 items-center w-[65%]">
                     <input
-                      onChange={() => handleCheckbox(item)}
                       type="checkbox"
                       checked={item.isCompleted}
+                      onChange={() =>
+                        handleCheckbox(item)
+                      }
                     />
 
-                    {/* TEXT + TIME */}
                     <div className="flex flex-col">
                       <div
-                        className={`font-semibold ${item.isCompleted
+                        className={`font-semibold ${
+                          item.isCompleted
                             ? "line-through text-gray-400"
                             : "text-gray-700"
-                          }`}
+                        }`}
                       >
                         {item.todo}
                       </div>
 
                       <div className="text-xs text-gray-500">
-                        {item.createdAt && (() => {
-                          const date = new Date(item.createdAt);
-
-                          const day = String(date.getDate()).padStart(2, "0");
-                          const month = String(date.getMonth() + 1).padStart(2, "0");
-                          const year = date.getFullYear();
-
-                          let hours = date.getHours();
-                          const minutes = String(date.getMinutes()).padStart(2, "0");
-
-                          const ampm = hours >= 12 ? "PM" : "AM";
-                          hours = hours % 12 || 12;
-
-                          return `${day}-${month}-${year} & ${hours}:${minutes} ${ampm}`;
-                        })()}
+                        {item.createdAt &&
+                          formatDate(item.createdAt)}
                       </div>
                     </div>
                   </div>
 
-                  {/* ACTIONS */}
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(item)}
@@ -221,7 +273,9 @@ export default function Home() {
                     </button>
 
                     <button
-                      onClick={() => handleDelete(item._id)}
+                      onClick={() =>
+                        handleDelete(item._id)
+                      }
                       className="bg-red-500 px-2 py-1 rounded text-white"
                     >
                       <MdDelete />
@@ -232,6 +286,9 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Voice Agent Added */}
+      <VoiceAgent fetchTodos={fetchTodos} />
     </>
   );
 }
